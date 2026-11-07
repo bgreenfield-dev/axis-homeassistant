@@ -1,0 +1,12 @@
+{
+  "domain": "axis_home",
+  "name": "Axis Home",
+  "codeowners": ["@bgreenfield1802"],
+  "config_flow": true,
+  "documentation": "https://github.com/bgreenfield-dev/axis-homeassistant",
+  "integration_type": "hub",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/bgreenfield-dev/axis-homeassistant/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

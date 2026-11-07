@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Axis",
+        "data": { "url": "Axis address", "code": "Pairing code" },
+        "data_description": {
+          "url": "Where Home Assistant reaches Axis, like http://10.0.0.5:7337",
+          "code": "From \"server pair\" in Axis. \"home config ha link\" in Axis fills this in for you."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Pair Axis again",
+        "data": { "code": "Pairing code" }
+      }
+    },
+    "error": {
+      "bad_code": "That pairing code is wrong or expired",
+      "cannot_connect": "Can't reach Axis at that address"
+    },
+    "abort": {
+      "already_configured": "This Axis is already added",
+      "reauth_successful": "Paired again"
+    }
+  },
+  "issues": {
+    "protocol": {
+      "title": "Axis Home and Axis don't match",
+      "description": "Axis {axis} speaks another version of the rooms protocol than Axis Home {ours}. Update whichever is older."
+    }
+  }
+}
