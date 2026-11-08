@@ -1,4 +1,4 @@
-"""Axis Home: Axis's rooms as Home Assistant devices.
+"""Axis Home: Axis's rooms as Home Assistant devices, and notices sent to Axis.
 
 Axis is the brain and the source of truth. Each room it declares is one device here, with
 the entities Axis lists for it; their values come live from Axis, and a change made here is
@@ -11,14 +11,30 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+import voluptuous as vol
+
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
+from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryNotReady,
+    HomeAssistantError,
+    ServiceValidationError,
+)
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.typing import ConfigType
 
-from .client import AxisAuthError, AxisClient, AxisError
+from .client import (
+    PRIORITIES,
+    AxisAuthError,
+    AxisClient,
+    AxisError,
+    notice_error,
+    notice_params,
+)
 from .const import CONF_TOKEN, CONF_URL, DOMAIN, HA_PROTOCOL, PLATFORMS, VERSION
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,6 +54,48 @@ class AxisHomeData:
 
 
 type AxisHomeConfigEntry = ConfigEntry[AxisHomeData]
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+SERVICE_NOTIFY = "notify"
+NOTIFY_SCHEMA = vol.Schema(
+    {
+        vol.Required("message"): cv.string,
+        vol.Optional("title"): cv.string,
+        vol.Optional("priority"): vol.In(PRIORITIES),
+        vol.Optional("url"): cv.url,
+        vol.Optional("config_entry_id"): cv.string,
+    }
+)
+
+
+async def send_notice(entry: AxisHomeConfigEntry, notice: dict[str, Any]) -> None:
+    """Sends a notice to Axis, from its Home Assistant source."""
+    try:
+        await entry.runtime_data.client.call("rooms.haNotify", notice_params(**notice))
+    except AxisError as err:
+        raise HomeAssistantError(notice_error(err)) from err
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """axis_home.notify: a notice with a priority and a link, beyond what notify.send_message takes."""
+
+    async def notify(call: ServiceCall) -> None:
+        wanted = call.data.get("config_entry_id")
+        entries = [
+            e
+            for e in hass.config_entries.async_entries(DOMAIN)
+            if e.state is ConfigEntryState.LOADED and (not wanted or e.entry_id == wanted)
+        ]
+        if not entries:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="not_connected"
+            )
+        notice = {k: call.data[k] for k in ("message", "title", "priority", "url") if k in call.data}
+        await send_notice(entries[0], notice)
+
+    hass.services.async_register(DOMAIN, SERVICE_NOTIFY, notify, schema=NOTIFY_SCHEMA)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: AxisHomeConfigEntry) -> bool:

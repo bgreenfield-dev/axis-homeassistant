@@ -27,6 +27,7 @@ class FakeHub:
         self.codes = {"ABCD2345"}
         self.tokens = set()
         self.sockets = []
+        self.notices = []
 
     async def handler(self, request):
         ws = web.WebSocketResponse()
@@ -50,6 +51,11 @@ class FakeHub:
                 if data["method"] == "rooms.haHello":
                     await ws.send_json(
                         {"type": "response", "id": data["id"], "ok": True, "result": {"protocol": 1}}
+                    )
+                elif data["method"] == "rooms.haNotify":
+                    self.notices.append(data["params"])
+                    await ws.send_json(
+                        {"type": "response", "id": data["id"], "ok": True, "result": {"ok": True}}
                     )
                 else:
                     await ws.send_json(
@@ -121,4 +127,34 @@ async def test_calls_watches_and_reconnects(hub, monkeypatch):
             await asyncio.sleep(0.02)
         assert live == ["rooms-ha:bedroom", "rooms-ha:bedroom"]
         assert states[:3] == [True, False, True]
+        await c.close()
+
+
+def test_notice_params_leave_out_what_wasnt_given():
+    assert client_mod.notice_params("Washer done") == {"message": "Washer done"}
+    assert client_mod.notice_params(
+        "The washing machine finished.", "Washer done", "urgent", "https://example.com"
+    ) == {
+        "message": "The washing machine finished.",
+        "title": "Washer done",
+        "priority": "urgent",
+        "url": "https://example.com",
+    }
+    assert client_mod.notice_params("x", title=None, priority="") == {"message": "x"}
+
+
+def test_an_older_axis_says_to_update():
+    old = client_mod.AxisError("Home Assistant may only use rooms.ha")
+    assert client_mod.notice_error(old) == "Update Axis to take notices from Home Assistant"
+    assert client_mod.notice_error(client_mod.AxisError("Say a message")) == "Say a message"
+
+
+async def test_sends_a_notice(hub):
+    hub.tokens.add("tok")
+    async with aiohttp.ClientSession() as session:
+        c = client_mod.AxisClient(session, hub.url, "tok", lambda k, d: None)
+        await c.start()
+        result = await c.call("rooms.haNotify", client_mod.notice_params("Front door open"))
+        assert result == {"ok": True}
+        assert hub.notices == [{"message": "Front door open"}]
         await c.close()

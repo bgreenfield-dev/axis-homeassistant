@@ -1,0 +1,30 @@
+notify:
+  fields:
+    message:
+      required: true
+      example: The washing machine finished.
+      selector:
+        text:
+          multiline: true
+    title:
+      example: Washer done
+      selector:
+        text:
+    priority:
+      selector:
+        select:
+          translation_key: priority
+          options:
+            - quiet
+            - low
+            - normal
+            - urgent
+    url:
+      example: https://example.com
+      selector:
+        text:
+          type: url
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: axis_home

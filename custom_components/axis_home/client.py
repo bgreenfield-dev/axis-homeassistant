@@ -1,7 +1,8 @@
 """The Axis server's socket, as Axis Home uses it.
 
 Axis Home signs in to the Axis hub as Home Assistant: a login that may only call
-rooms.haHello, rooms.haSet and rooms.haPress and watch "rooms-ha:<room>" values.
+rooms.haHello, rooms.haSet, rooms.haPress and rooms.haNotify and watch "rooms-ha:<room>"
+values.
 This module knows nothing about Home Assistant, so it is tested on its own.
 """
 
@@ -32,6 +33,30 @@ class AxisError(Exception):
 
 class AxisAuthError(AxisError):
     """Axis turned the login away: a wrong or used code, or a revoked login."""
+
+
+PRIORITIES = ("quiet", "low", "normal", "urgent")
+
+
+def notice_params(
+    message: str,
+    title: str | None = None,
+    priority: str | None = None,
+    url: str | None = None,
+) -> dict[str, str]:
+    """rooms.haNotify's params: what was given, leaving the rest to Axis's settings."""
+    params = {"message": message}
+    for key, value in (("title", title), ("priority", priority), ("url", url)):
+        if value:
+            params[key] = value
+    return params
+
+
+def notice_error(err: AxisError) -> str:
+    """What a failed notice says; an Axis from before notices only knows rooms."""
+    if "may only use" in str(err):
+        return "Update Axis to take notices from Home Assistant"
+    return str(err)
 
 
 def ws_url(url: str) -> str:
