@@ -3,7 +3,10 @@
     "step": {
       "user": {
         "title": "Axis",
-        "data": { "url": "Axis address", "code": "Pairing code" },
+        "data": {
+          "url": "Axis address",
+          "code": "Pairing code"
+        },
         "data_description": {
           "url": "Where Home Assistant reaches Axis, like http://10.0.0.5:7337",
           "code": "From \"server pair\" in Axis. \"home config ha link\" in Axis fills this in for you."
@@ -11,7 +14,9 @@
       },
       "reauth_confirm": {
         "title": "Pair Axis again",
-        "data": { "code": "Pairing code" }
+        "data": {
+          "code": "Pairing code"
+        }
       }
     },
     "error": {
@@ -27,6 +32,56 @@
     "protocol": {
       "title": "Axis Home and Axis don't match",
       "description": "Axis {axis} speaks another version of the rooms protocol than Axis Home {ours}. Update whichever is older."
+    }
+  },
+  "entity": {
+    "notify": {
+      "axis": {
+        "name": "Axis"
+      }
+    }
+  },
+  "exceptions": {
+    "not_connected": {
+      "message": "Axis Home isn't connected to Axis"
+    }
+  },
+  "selector": {
+    "priority": {
+      "options": {
+        "quiet": "Quiet",
+        "low": "Low",
+        "normal": "Normal",
+        "urgent": "Urgent"
+      }
+    }
+  },
+  "services": {
+    "notify": {
+      "name": "Send a notice",
+      "description": "Sends a notice to Axis from its Home Assistant source.",
+      "fields": {
+        "message": {
+          "name": "Message",
+          "description": "The notice's text."
+        },
+        "title": {
+          "name": "Title",
+          "description": "Its heading. Without one, the message is the heading."
+        },
+        "priority": {
+          "name": "Priority",
+          "description": "Quiet, low, normal or urgent. Without one, the Home Assistant source's setting in Axis decides."
+        },
+        "url": {
+          "name": "Link",
+          "description": "A page the notice's Open button shows."
+        },
+        "config_entry_id": {
+          "name": "Axis",
+          "description": "Which Axis, when there's more than one."
+        }
+      }
     }
   }
 }
