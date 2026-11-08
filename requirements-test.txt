@@ -1,0 +1,3 @@
+# For tests/ha (Home Assistant's own harness). tests/test_client.py needs only aiohttp,
+# pytest and pytest-asyncio.
+pytest-homeassistant-custom-component

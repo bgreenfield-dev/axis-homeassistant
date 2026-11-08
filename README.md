@@ -52,9 +52,22 @@ Axis Home signs in as its own kind of login. It can only read and change rooms a
 
 The two sides check each other's protocol on connect. When they don't match, a Repairs issue says which side to update.
 
+## Releases
+
+Raising `version` in `custom_components/axis_home/manifest.json` on main tags it and publishes a release (`.github/workflows/release.yml`), which HACS offers as an update.
+
 ## Development
+
+The client, without Home Assistant:
 
 ```
 pip install aiohttp pytest pytest-asyncio
-python -m pytest -q tests
+python -m pytest -q tests/test_client.py
+```
+
+The entities and the config flow, in Home Assistant's test harness (a separate environment: it blocks the sockets the client tests use):
+
+```
+pip install -r requirements-test.txt
+python -m pytest -q tests/ha
 ```

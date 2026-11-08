@@ -25,4 +25,15 @@ jobs:
         with:
           python-version: '3.13'
       - run: pip install aiohttp pytest pytest-asyncio
-      - run: python -m pytest -q tests
+      - run: python -m pytest -q tests/test_client.py
+  # The entities and the config flow, in Home Assistant's own test harness. A job of its own:
+  # the harness blocks sockets, which the client tests need for their stand-in Axis.
+  entities:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: pip install -r requirements-test.txt
+      - run: python -m pytest -q tests/ha

@@ -1,0 +1,38 @@
+name: Release
+
+# HACS offers updates by release. When main's manifest has a version with no tag yet, this tags
+# it v<version> and publishes a release, so HACS installs that version and offers the next one
+# as an update. Raise "version" in custom_components/axis_home/manifest.json to release.
+on:
+  push:
+    branches: [main]
+    paths: ['custom_components/axis_home/manifest.json']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Read the version
+        id: version
+        run: |
+          v="$(python3 -c 'import json; print(json.load(open("custom_components/axis_home/manifest.json"))["version"])')"
+          echo "tag=v$v" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/v$v" >/dev/null; then
+            echo "v$v is tagged already"
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Tag and release
+        if: steps.version.outputs.new == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: gh release create "$TAG" --target "$GITHUB_SHA" --title "Axis Home $TAG" --generate-notes
