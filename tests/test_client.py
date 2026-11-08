@@ -28,6 +28,7 @@ class FakeHub:
         self.tokens = set()
         self.sockets = []
         self.notices = []
+        self.silent = False
 
     async def handler(self, request):
         ws = web.WebSocketResponse()
@@ -37,6 +38,8 @@ class FakeHub:
             data = json.loads(msg.data)
             if data["type"] == "hello":
                 self.hellos.append(data)
+                if self.silent:
+                    continue
                 auth = data["auth"]
                 if auth.get("pairingCode") in self.codes:
                     self.codes.discard(auth["pairingCode"])
@@ -48,6 +51,8 @@ class FakeHub:
                     await ws.send_json({"type": "denied", "reason": "wrong or expired"})
                     await ws.close()
             elif data["type"] == "request":
+                if data["method"] == "rooms.slow":
+                    continue
                 if data["method"] == "rooms.haHello":
                     await ws.send_json(
                         {"type": "response", "id": data["id"], "ok": True, "result": {"protocol": 1}}
@@ -157,4 +162,41 @@ async def test_sends_a_notice(hub):
         result = await c.call("rooms.haNotify", client_mod.notice_params("Front door open"))
         assert result == {"ok": True}
         assert hub.notices == [{"message": "Front door open"}]
+        await c.close()
+
+
+async def test_keeps_reconnecting_after_a_login_axis_never_answers(hub, monkeypatch):
+    monkeypatch.setattr(client_mod, "RETRY_DELAYS", (0.05,))
+    monkeypatch.setattr(client_mod, "HELLO_TIMEOUT", 0.2)
+    hub.tokens.add("tok")
+    states = []
+    async with aiohttp.ClientSession() as session:
+        c = client_mod.AxisClient(session, hub.url, "tok", lambda k, d: None, states.append)
+        await c.start()
+        # Axis restarts and is slow to answer the next login.
+        hub.silent = True
+        await hub.sockets[-1].close()
+        for _ in range(100):
+            if len(hub.hellos) >= 3:
+                break
+            await asyncio.sleep(0.02)
+        assert not c._task.done()
+        hub.silent = False
+        for _ in range(100):
+            if c.connected:
+                break
+            await asyncio.sleep(0.02)
+        assert c.connected
+        assert states[0] is True and states[-1] is True
+        await c.close()
+
+
+async def test_a_call_axis_never_answers_is_an_axis_error(hub, monkeypatch):
+    monkeypatch.setattr(client_mod, "REQUEST_TIMEOUT", 0.1)
+    hub.tokens.add("tok")
+    async with aiohttp.ClientSession() as session:
+        c = client_mod.AxisClient(session, hub.url, "tok", lambda k, d: None)
+        await c.start()
+        with pytest.raises(client_mod.AxisError):
+            await c.call("rooms.slow")
         await c.close()

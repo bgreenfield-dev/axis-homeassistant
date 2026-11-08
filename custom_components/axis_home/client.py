@@ -23,6 +23,8 @@ from .const import SERVER_DEVICE, SOCKET_PROTOCOL, VERSION
 _LOGGER = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT = 20
+# How long Axis has to answer the hello before the attempt counts as failed.
+HELLO_TIMEOUT = 15
 # Reconnect waits, in seconds, the last repeated.
 RETRY_DELAYS = (1, 2, 5, 10, 30, 60)
 
@@ -153,11 +155,19 @@ class AxisClient:
     async def _connect(self) -> None:
         try:
             ws = await self._session.ws_connect(ws_url(self._url), heartbeat=30, timeout=aiohttp.ClientWSTimeout(ws_close=15))
-        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+        except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as err:
             raise AxisError(f"Can't reach Axis at {self._url}: {err}") from err
-        await ws.send_json(hello({"token": self._token}))
-        msg = await ws.receive(timeout=15)
-        data = json.loads(msg.data) if msg.type == aiohttp.WSMsgType.TEXT else {}
+        # A late or garbled hello (Axis still starting after an update) is a failed
+        # attempt like any other: the caller retries it, it must not end the loop.
+        try:
+            await ws.send_json(hello({"token": self._token}))
+            msg = await ws.receive(timeout=HELLO_TIMEOUT)
+            data = json.loads(msg.data) if msg.type == aiohttp.WSMsgType.TEXT else {}
+            if not isinstance(data, dict):
+                data = {}
+        except (aiohttp.ClientError, asyncio.TimeoutError, OSError, ValueError) as err:
+            await ws.close()
+            raise AxisError(f"Axis at {self._url} didn't answer the login: {err!r}") from err
         if data.get("type") == "denied":
             await ws.close()
             raise AxisAuthError(str(data.get("reason", "Axis said no")))
@@ -188,7 +198,7 @@ class AxisClient:
                 except AxisAuthError as err:
                     _LOGGER.error("Axis turned the login away: %s", err)
                     return
-                except AxisError as err:
+                except Exception as err:  # noqa: BLE001 - only a refused login ends the loop
                     delay = RETRY_DELAYS[min(attempt, len(RETRY_DELAYS) - 1)]
                     attempt += 1
                     _LOGGER.debug("Axis unreachable (%s); again in %ss", err, delay)
@@ -232,17 +242,21 @@ class AxisClient:
         rid = f"ha{next(self._ids)}"
         fut: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
         self._pending[rid] = fut
-        await self._ws.send_json(
-            {
-                "type": "request",
-                "id": rid,
-                "device": SERVER_DEVICE,
-                "method": method,
-                "params": params or {},
-            }
-        )
         try:
+            await self._ws.send_json(
+                {
+                    "type": "request",
+                    "id": rid,
+                    "device": SERVER_DEVICE,
+                    "method": method,
+                    "params": params or {},
+                }
+            )
             return await asyncio.wait_for(fut, REQUEST_TIMEOUT)
+        except asyncio.TimeoutError as err:
+            raise AxisError(f"Axis didn't answer {method} in time") from err
+        except (aiohttp.ClientError, OSError) as err:
+            raise AxisError(f"Lost the connection to Axis: {err}") from err
         finally:
             self._pending.pop(rid, None)
 
